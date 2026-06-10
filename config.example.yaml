@@ -1,0 +1,63 @@
+# Hearth configuration. Copy to config.yaml and edit.
+
+assistant:
+  name: Hearth
+  # Spoken persona + standing instructions, prepended to every LLM call.
+  persona: >
+    You are Hearth, a voice assistant living on this Mac. You are in a live,
+    never-ending spoken conversation. Keep replies short and conversational —
+    one to three sentences unless asked for detail. When the user asks for
+    real work (build a website, check email, write a document), call the
+    matching tool instead of describing what you would do. Narrate job
+    completions naturally when they arrive.
+
+llm:
+  # base_url / api_key / model come from .env; these tune generation.
+  temperature: 0.7
+  max_tokens: 400          # spoken replies should be short
+  request_timeout_s: 120
+
+context:
+  window_token_budget: 6000    # live window size before a roll
+  roll_keep_turns: 8           # most-recent turns preserved verbatim on roll
+  summary_max_tokens: 300      # size of each compressed memory block
+  memory_dir: ~/.hearth/memory
+
+voice:
+  stt:
+    model: small             # faster-whisper model: tiny/base/small/medium
+    device: auto             # auto -> metal on Apple Silicon via CTranslate2
+    language: en
+  tts:
+    engine: say              # say | piper
+    say_voice: Samantha
+    say_rate_wpm: 190
+    piper_model: ~/.hearth/voices/en_US-lessac-medium.onnx
+  vad:
+    aggressiveness: 2        # 0-3, higher = stricter speech detection
+    silence_end_ms: 700      # silence that ends the user's turn
+    min_speech_ms: 250       # ignore blips shorter than this
+
+channels:
+  discord:
+    enabled: true
+    command_prefix: "!"
+    auto_rejoin: true        # rejoin voice on disconnect — never hang up
+  facetime:
+    enabled: false           # requires BlackHole loopback; see docs/facetime.md
+    auto_answer: true
+    input_device: "BlackHole 2ch"
+    output_device: "BlackHole 2ch"
+
+actions:
+  workspace_dir: ~/Hearth/workspaces   # harness jobs run here
+  documents_dir: ~/Documents/Hearth
+  harness:
+    # Command template for agentic jobs. {prompt} is substituted.
+    # --permission-mode acceptEdits lets jobs build things unattended
+    # inside the workspace; tighten or loosen to taste.
+    claude_cmd: ["claude", "-p", "{prompt}", "--permission-mode", "acceptEdits"]
+    job_timeout_s: 3600
+  email:
+    backend: applescript     # applescript (Mail.app) | imap
+    unread_limit: 10

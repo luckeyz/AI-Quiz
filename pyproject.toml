@@ -1,0 +1,30 @@
+[project]
+name = "hearth-assistant"
+version = "0.1.0"
+description = "Always-on local LLM voice assistant for macOS with Discord/FaceTime channels and agentic actions"
+requires-python = ">=3.11"
+dependencies = [
+    "py-cord[voice]>=2.5",        # discord voice send + receive (sinks)
+    "faster-whisper>=1.0",        # local STT
+    "webrtcvad>=2.0.10",          # voice activity detection
+    "httpx>=0.27",                # LLM client
+    "pydantic>=2.7",
+    "PyYAML>=6.0",
+    "python-dotenv>=1.0",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+piper = ["piper-tts>=1.2"]        # neural TTS alternative to macOS `say`
+imap = ["imap-tools>=1.6"]        # email without Mail.app
+facetime = ["sounddevice>=0.4"]   # CoreAudio I/O for the FaceTime bridge
+
+[project.scripts]
+hearth = "hearth.main:cli"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["hearth*"]
