@@ -25,6 +25,7 @@ class ContextConfig(BaseModel):
     roll_keep_turns: int = 8
     summary_max_tokens: int = 300
     memory_dir: Path = Path("~/.hearth/memory")
+    buddy_dir: Path = Path("~/.hearth/buddies")
 
 
 class STTConfig(BaseModel):
@@ -129,8 +130,8 @@ def load_config(path: str | Path = "config.yaml") -> Config:
     cfg.actions.email.imap_user = os.getenv("IMAP_USER", "")
     cfg.actions.email.imap_password = os.getenv("IMAP_PASSWORD", "")
 
-    for attr_path in ("context.memory_dir", "actions.workspace_dir",
-                      "actions.documents_dir"):
+    for attr_path in ("context.memory_dir", "context.buddy_dir",
+                      "actions.workspace_dir", "actions.documents_dir"):
         obj = cfg
         *parents, leaf = attr_path.split(".")
         for parent in parents:

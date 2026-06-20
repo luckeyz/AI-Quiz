@@ -17,6 +17,7 @@ from hearth.actions.builtin.email import check_email
 from hearth.actions.builtin.website import website_prompt
 from hearth.actions.harness import HarnessRunner
 from hearth.actions.jobs import EventCallback, JobManager
+from hearth.buddies.store import BuddyStore
 from hearth.config import Config
 from hearth.context.memory import MemoryStore
 
@@ -124,6 +125,122 @@ TOOL_SCHEMAS: list[dict[str, Any]] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "pair_buddy",
+            "description": ("Register an accountability buddy pairing between "
+                            "two users. Both users must agree; use their "
+                            "Discord user IDs or display names as identifiers."),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string",
+                                "description": "The user initiating the pairing."},
+                    "buddy_id": {"type": "string",
+                                 "description": "The user to pair with."},
+                },
+                "required": ["user_id", "buddy_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "unpair_buddy",
+            "description": "Remove a user's current buddy pairing.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                },
+                "required": ["user_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "buddy_status",
+            "description": ("Show a user's buddy, their shared goals (with "
+                            "completion status), and any pending notes from "
+                            "their buddy."),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                },
+                "required": ["user_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_buddy_goal",
+            "description": ("Add a shared accountability goal for a buddy pair. "
+                            "Both buddies can see and complete each other's goals."),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string",
+                                "description": "The user setting the goal."},
+                    "goal": {"type": "string",
+                             "description": "Description of the goal."},
+                },
+                "required": ["user_id", "goal"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "complete_buddy_goal",
+            "description": "Mark a shared goal as completed by its index number.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                    "goal_index": {"type": "integer",
+                                   "description": "Zero-based index from buddy_status."},
+                },
+                "required": ["user_id", "goal_index"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "leave_buddy_note",
+            "description": ("Leave a note for your buddy to read next time they "
+                            "check in. Notes are delivered once and then cleared."),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "from_user_id": {"type": "string",
+                                     "description": "The user leaving the note."},
+                    "note": {"type": "string",
+                             "description": "The note text."},
+                },
+                "required": ["from_user_id", "note"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "collect_buddy_notes",
+            "description": ("Retrieve and clear all pending notes for a user "
+                            "from their buddy. Call this when the user checks in."),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "user_id": {"type": "string"},
+                },
+                "required": ["user_id"],
+            },
+        },
+    },
 ]
 
 
@@ -133,6 +250,7 @@ class ActionRouter:
         self.harness = HarnessRunner(cfg.actions)
         self.jobs = JobManager(on_job_event)
         self.memory = MemoryStore(cfg.context.memory_dir)
+        self.buddies = BuddyStore(cfg.context.buddy_dir)
 
     def tool_schemas(self) -> list[dict[str, Any]]:
         return TOOL_SCHEMAS
@@ -172,6 +290,28 @@ class ActionRouter:
             case "remember":
                 self.memory.pin(args["key"], args["value"])
                 return f"Pinned: {args['key']} = {args['value']}"
+            case "pair_buddy":
+                return self.buddies.pair(args["user_id"], args["buddy_id"])
+            case "unpair_buddy":
+                return self.buddies.unpair(args["user_id"])
+            case "buddy_status":
+                return self.buddies.status_report(args["user_id"])
+            case "set_buddy_goal":
+                return self.buddies.set_goal(args["user_id"], args["goal"])
+            case "complete_buddy_goal":
+                return self.buddies.complete_goal(
+                    args["user_id"], int(args["goal_index"]))
+            case "leave_buddy_note":
+                return self.buddies.leave_note(
+                    args["from_user_id"], args["note"])
+            case "collect_buddy_notes":
+                notes = self.buddies.pop_notes(args["user_id"])
+                if not notes:
+                    return "No pending notes from your buddy."
+                lines = [f"Notes for {args['user_id']} from their buddy:"]
+                for n in notes:
+                    lines.append(f"  - {n['text']}")
+                return "\n".join(lines)
             case _:
                 return f"Unknown tool '{name}'. Available: " + ", ".join(
                     t["function"]["name"] for t in TOOL_SCHEMAS)
