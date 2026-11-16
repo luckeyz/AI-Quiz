@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Chess</title>
+<style>
+  :root {
+    --bg: #f4f2ec; --panel: #ffffff; --text: #23211d; --muted: #6d685e; --line: #dcd7cb;
+    --accent: #2f6f4f; --accent-text: #ffffff; --danger: #a8402f;
+    --light: #ece6d4; --dark: #7d9a7c; --select: #f2c94c; --last: rgba(242, 201, 76, .45);
+    --check: #d9503f;
+    color-scheme: light dark;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #1b1c1a; --panel: #262724; --text: #ecebe6; --muted: #a09c92; --line: #3a3b37;
+      --accent: #5fa67f; --accent-text: #10130f; --danger: #e07a68;
+      --light: #cfc9b6; --dark: #64805f;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; background: var(--bg); color: var(--text);
+    font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    display: flex; justify-content: center; padding: 20px 16px 40px;
+  }
+  main { width: 100%; max-width: min(560px, calc(100vh - 300px)); min-width: min(100%, 300px); }
+  h1 { font-size: 1.25rem; margin: 0; letter-spacing: .01em; }
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
+  .code { font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--muted); letter-spacing: .08em; }
+  [hidden] { display: none !important; }
+
+  button, input { font: inherit; color: inherit; }
+  .btn {
+    border: 1px solid var(--line); background: var(--panel); border-radius: 8px;
+    padding: 9px 14px; cursor: pointer; min-height: 42px;
+  }
+  .btn:hover:not(:disabled) { border-color: var(--muted); }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-text); font-weight: 600; }
+  .btn.danger { color: var(--danger); }
+  :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+  /* Lobby */
+  #lobby { display: grid; gap: 16px; margin-top: 12vh; }
+  #lobby p { margin: 0; color: var(--muted); }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 12px; }
+  .card h2 { font-size: 1rem; margin: 0; }
+  .row { display: flex; gap: 8px; }
+  .row input {
+    flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--bg); border-radius: 8px;
+    padding: 9px 12px; min-height: 42px;
+  }
+  #joinCode { text-transform: uppercase; font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .1em; }
+
+  /* Game */
+  .player { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 4px 2px; }
+  .player .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--line); flex: none; }
+  .player.online .dot { background: var(--accent); }
+  .player .name { font-weight: 600; }
+  .player.turn .name::after { content: " · to move"; font-weight: 400; color: var(--muted); }
+  .player .taken { margin-left: auto; color: var(--muted); font-size: 1.05rem; letter-spacing: -.08em; white-space: nowrap; }
+  .player .taken b { font: 600 .8rem system-ui, sans-serif; letter-spacing: 0; margin-left: 6px; }
+
+  #board {
+    display: grid; grid-template-columns: repeat(8, 1fr); aspect-ratio: 1; width: 100%;
+    border-radius: 6px; overflow: hidden; container-type: inline-size; user-select: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
+  }
+  .sq {
+    position: relative; border: 0; padding: 0; margin: 0; aspect-ratio: 1; cursor: default;
+    display: grid; place-items: center; background: var(--light); -webkit-tap-highlight-color: transparent;
+    font-size: 9.6cqw; line-height: 1; font-family: "Segoe UI Symbol", "Noto Sans Symbols2", "DejaVu Sans", "Apple Symbols", sans-serif;
+  }
+  .sq.dark { background: var(--dark); }
+  .sq.movable, .sq.target { cursor: pointer; }
+  .sq.last::before { content: ""; position: absolute; inset: 0; background: var(--last); }
+  .sq.selected::before { content: ""; position: absolute; inset: 0; background: var(--select); opacity: .85; }
+  .sq.check::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle, var(--check) 25%, transparent 75%); }
+  .sq.target::after {
+    content: ""; position: absolute; width: 30%; height: 30%; border-radius: 50%; background: rgba(20, 30, 20, .32);
+  }
+  .sq.target.capture::after {
+    width: 88%; height: 88%; background: none; border: .9cqw solid rgba(20, 30, 20, .32);
+  }
+  .sq:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; z-index: 1; }
+  .piece { position: relative; pointer-events: none; }
+  .piece.w { color: #fbfaf6; text-shadow: 0 0 1px #000, 0 0 1px #000, 0 1px 2px rgba(0, 0, 0, .6), 1px 0 0 #222, -1px 0 0 #222, 0 1px 0 #222, 0 -1px 0 #222; }
+  .piece.b { color: #1d1c1a; text-shadow: 0 0 1px rgba(255, 255, 255, .5); }
+  .coord {
+    position: absolute; font: 600 2.1cqw system-ui, sans-serif; color: var(--dark); pointer-events: none;
+  }
+  .sq.dark .coord { color: var(--light); }
+  .coord.rank { top: 3%; left: 5%; }
+  .coord.file { bottom: 2%; right: 6%; }
+
+  #status { margin: 10px 0 0; min-height: 1.5em; font-weight: 600; }
+  #hint { margin: 2px 0 12px; color: var(--muted); min-height: 1.5em; font-size: .93rem; }
+  #promo { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  #promo .sq { width: 54px; font-size: 38px; border-radius: 8px; cursor: pointer; background: var(--light); }
+  .controls { display: flex; gap: 8px; flex-wrap: wrap; }
+  #invite { margin-top: 14px; }
+  #moves {
+    margin: 16px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: 2.2em 1fr 1fr;
+    gap: 2px 10px; font-variant-numeric: tabular-nums; max-height: 180px; overflow-y: auto;
+  }
+  #moves .n { color: var(--muted); }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Chess</h1>
+    <span class="code" id="roomCode"></span>
+  </header>
+
+  <section id="lobby" hidden>
+    <p>Play a friend online. Tap a piece, then tap where it should go.</p>
+    <div class="card">
+      <h2>Start a game</h2>
+      <button class="btn primary" id="create">Create game</button>
+    </div>
+    <form class="card" id="joinForm">
+      <h2>Join with a code</h2>
+      <div class="row">
+        <input id="joinCode" maxlength="5" placeholder="ABCDE" aria-label="Game code" autocomplete="off" required>
+        <button class="btn">Join</button>
+      </div>
+    </form>
+    <p id="lobbyError" role="alert"></p>
+  </section>
+
+  <section id="game" hidden>
+    <div class="player" id="top"><span class="dot"></span><span class="name"></span><span class="taken"></span></div>
+    <div id="board" role="group" aria-label="Chess board"></div>
+    <div class="player" id="bottom"><span class="dot"></span><span class="name"></span><span class="taken"></span></div>
+
+    <p id="status" aria-live="polite"></p>
+    <p id="hint"></p>
+    <div id="promo" hidden><span>Promote to:</span></div>
+
+    <div class="controls">
+      <button class="btn danger" id="resign">Resign</button>
+      <button class="btn primary" id="rematch" hidden>Rematch</button>
+      <button class="btn" id="leave">Leave</button>
+    </div>
+    <div class="card" id="invite" hidden>
+      <h2>Invite your opponent</h2>
+      <div class="row">
+        <input id="link" readonly aria-label="Invite link">
+        <button class="btn" id="copy">Copy</button>
+      </div>
+    </div>
+    <ol id="moves" aria-label="Moves"></ol>
+  </section>
+</main>
+<script src="engine.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

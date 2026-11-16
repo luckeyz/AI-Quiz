@@ -1,0 +1,14 @@
+{
+  "name": "tap-chess",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Two-player online chess with a tap-a-piece, tap-a-square interface",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
