@@ -13,7 +13,7 @@
   let stream = null;     // EventSource for the room
   let view = null;       // latest snapshot from the server
   let state = null;      // position on screen (may be one move ahead of the server)
-  let selected = null;   // square of the piece picked up
+  let selected = null;   // square of the piece chosen on the remote
   let promotion = null;  // {from, to} while choosing a promotion piece
   let resignArmed = false;
 
@@ -37,6 +37,22 @@
 
   // ---- Lobby ---------------------------------------------------------------
 
+  let lobbyTimer = null;
+
+  async function refreshOpenGames() {
+    let codes = [];
+    try { codes = (await (await fetch('/api/rooms')).json()).rooms; } catch { /* keep the list empty */ }
+    if ($('lobby').hidden) return;
+    const list = $('openGames');
+    list.textContent = '';
+    for (const code of codes) {
+      const el = Object.assign(document.createElement('button'), { className: 'btn', textContent: 'Join ' + code });
+      el.onclick = () => enterRoom(code);
+      list.append(el);
+    }
+    $('noGames').hidden = codes.length > 0;
+  }
+
   function showLobby(message) {
     if (stream) stream.close();
     stream = null; room = null; view = null; state = null;
@@ -45,6 +61,9 @@
     $('roomCode').textContent = '';
     $('lobbyError').textContent = message || '';
     if (location.hash) history.replaceState(null, '', location.pathname);
+    refreshOpenGames();
+    clearInterval(lobbyTimer);
+    lobbyTimer = setInterval(refreshOpenGames, 3000);
   }
 
   function enterRoom(code) {
@@ -59,10 +78,11 @@
       view = JSON.parse(event.data);
       state = view.state;
       if (firstSnapshot) {
+        clearInterval(lobbyTimer);
         $('lobby').hidden = true;
         $('game').hidden = false;
         $('roomCode').textContent = room;
-        $('link').value = location.href;
+        $('link').textContent = location.href;
       }
       // Keep the selection while nothing has moved (e.g. the opponent reconnecting).
       if (view.moves.length !== previousMoves) { selected = null; promotion = null; }
@@ -86,33 +106,18 @@
     $('create').disabled = false;
   };
 
-  $('joinForm').onsubmit = (event) => {
-    event.preventDefault();
-    const code = $('joinCode').value.trim();
-    if (code) enterRoom(code);
-  };
-
   // ---- Playing -------------------------------------------------------------
 
   const myTurn = () =>
     view && view.you && !view.status.over && view.players.w.taken && view.players.b.taken &&
     state === view.state && state.turn === view.you;
 
-  function onSquare(sq) {
-    if (!myTurn()) return;
-    promotion = null;
-    const moves = Chess.legalMoves(state);
-    const chosen = selected === null ? [] : moves.filter((m) => m.from === selected && m.to === sq);
-    if (chosen.length > 1) {
-      promotion = { from: selected, to: sq };
-    } else if (chosen.length === 1) {
-      return play(chosen[0]);
-    } else if (sq !== selected && moves.some((m) => m.from === sq)) {
-      selected = sq;
-    } else {
-      selected = null;
-    }
-    render();
+  // Step 2 of the remote: a destination was chosen for the selected piece.
+  function choosePosition(to) {
+    const chosen = Chess.legalMoves(state).filter((m) => m.from === selected && m.to === to);
+    if (chosen.length === 1) return play(chosen[0]);
+    promotion = { from: selected, to };   // several moves share the square: pick the new piece
+    render(true);
   }
 
   async function play(move) {
@@ -143,13 +148,14 @@
   $('leave').onclick = () => showLobby();
   $('copy').onclick = async () => {
     try {
-      await navigator.clipboard.writeText($('link').value);
+      await navigator.clipboard.writeText(location.href);
+      $('copy').textContent = 'Copied';
     } catch {
-      $('link').select();
-      document.execCommand('copy');
+      // No clipboard access (plain http): highlight the link so it can be copied by hand.
+      getSelection().selectAllChildren($('link'));
+      $('copy').textContent = 'Link selected';
     }
-    $('copy').textContent = 'Copied';
-    setTimeout(() => { $('copy').textContent = 'Copy'; }, 1500);
+    setTimeout(() => { $('copy').textContent = 'Copy invite link'; }, 1500);
   };
 
   // ---- Rendering -----------------------------------------------------------
@@ -163,12 +169,9 @@
 
   function renderBoard() {
     const flipped = view.you === 'b';
-    const active = myTurn();
-    const moves = active ? Chess.legalMoves(state) : [];
+    const moves = myTurn() && selected !== null ? Chess.legalMoves(state) : [];
     const targets = new Set(moves.filter((m) => m.from === selected).map((m) => m.to));
-    const movable = new Set(moves.map((m) => m.from));
     const checked = Chess.inCheck(state) ? Chess.kingSquare(state.board, state.turn) : -1;
-    const focused = document.activeElement && document.activeElement.dataset ? document.activeElement.dataset.sq : null;
 
     const board = $('board');
     board.textContent = '';
@@ -176,33 +179,26 @@
       const sq = flipped ? 63 - i : i;
       const piece = state.board[sq];
       const name = Chess.squareName(sq);
-      const el = document.createElement('button');
-      el.type = 'button';
+      const el = document.createElement('div');
       el.dataset.sq = sq;
+      el.setAttribute('role', 'img');
       el.className = 'sq' + (((sq >> 3) + (sq & 7)) % 2 ? ' dark' : '');
       if (view.lastMove && (view.lastMove.from === sq || view.lastMove.to === sq)) el.classList.add('last');
       if (sq === selected) el.classList.add('selected');
       if (sq === checked) el.classList.add('check');
-      if (movable.has(sq)) el.classList.add('movable');
       if (targets.has(sq)) {
         el.classList.add('target');
         if (piece || sq === state.ep) el.classList.add('capture');
       }
       let label = name + (piece ? `, ${COLOR[Chess.colorOf(piece)].toLowerCase()} ${NAME[piece.toLowerCase()]}` : '');
       if (sq === selected) label += ', selected';
-      if (targets.has(sq)) label += ', move here';
+      if (targets.has(sq)) label += ', possible move';
       el.setAttribute('aria-label', label);
-      if (!active) el.tabIndex = -1;
 
       if (i % 8 === 0) el.append(Object.assign(document.createElement('span'), { className: 'coord rank', textContent: name[1] }));
       if (i >= 56) el.append(Object.assign(document.createElement('span'), { className: 'coord file', textContent: name[0] }));
       if (piece) el.append(pieceEl(piece));
-      el.onclick = () => onSquare(sq);
       board.append(el);
-    }
-    if (focused !== null) {
-      const again = board.querySelector(`[data-sq="${focused}"]`);
-      if (again) again.focus();
     }
   }
 
@@ -255,13 +251,15 @@
       }
     } else if (waiting) {
       text = 'Waiting for an opponent to join.';
-      hint = 'Send them the invite link below.';
+      hint = `They can open this link, or press Join ${view.room} on the start page.`;
     } else if (!you) {
       text = `${COLOR[state.turn]} to move.`;
       hint = 'You are watching this game.';
     } else if (state.turn === you) {
       text = Chess.inCheck(state) ? 'You are in check.' : 'Your turn.';
-      hint = promotion ? '' : selected === null ? 'Tap a piece to select it.' : 'Now tap where it should go.';
+      if (promotion) hint = 'Select what the pawn becomes.';
+      else if (selected === null) hint = 'Select a piece.';
+      else hint = `Select a position for the ${NAME[state.board[selected].toLowerCase()]} on ${Chess.squareName(selected)}.`;
     } else {
       text = `${COLOR[state.turn]} is thinking…`;
     }
@@ -275,21 +273,49 @@
     $('rematch').disabled = !!you && view.rematch[you];
   }
 
-  function renderPromotion() {
-    const box = $('promo');
-    box.hidden = !promotion;
-    box.querySelectorAll('button').forEach((b) => b.remove());
-    if (!promotion) return;
-    for (const type of 'qrbn') {
-      const piece = view.you === 'w' ? type.toUpperCase() : type;
+  // The remote: every way to act on the board is a button here.
+  function renderPad(refocus) {
+    const pad = $('pad');
+    pad.textContent = '';
+    if (!myTurn()) return;
+    const key = (text, piece, label, onclick, wide) => {
       const el = document.createElement('button');
       el.type = 'button';
-      el.className = 'sq';
-      el.setAttribute('aria-label', 'Promote to ' + NAME[type]);
-      el.append(pieceEl(piece));
-      el.onclick = () => play({ ...promotion, promo: type });
-      box.append(el);
+      el.className = 'key' + (wide ? ' wide' : '');
+      if (piece) el.append(pieceEl(piece));
+      el.append(text);
+      el.setAttribute('aria-label', label);
+      el.onclick = onclick;
+      pad.append(el);
+    };
+    const moves = Chess.legalMoves(state);
+
+    if (promotion) {
+      for (const type of 'qrbn') {
+        const piece = view.you === 'w' ? type.toUpperCase() : type;
+        key('', piece, 'Promote to ' + NAME[type], () => play({ ...promotion, promo: type }));
+      }
+      key('Back', null, 'Back to positions', () => { promotion = null; render(true); }, true);
+    } else if (selected !== null) {
+      const targets = [...new Set(moves.filter((m) => m.from === selected).map((m) => m.to))];
+      targets.sort((a, b) => (a & 7) - (b & 7) || b - a);
+      for (const to of targets) {
+        const capture = state.board[to] || to === state.ep && state.board[selected].toLowerCase() === 'p';
+        const name = Chess.squareName(to);
+        key((capture ? '×' : '') + name, null, (capture ? 'Capture on ' : 'Move to ') + name, () => choosePosition(to));
+      }
+      key('Back', null, 'Back to pieces', () => { selected = null; render(true); }, true);
+    } else {
+      const pieces = [...new Set(moves.map((m) => m.from))];
+      const rank = (sq) => 'kqrbnp'.indexOf(state.board[sq].toLowerCase());
+      pieces.sort((a, b) => rank(a) - rank(b) || (a & 7) - (b & 7) || b - a);
+      for (const sq of pieces) {
+        const piece = state.board[sq];
+        const name = Chess.squareName(sq);
+        key(name, piece, `${NAME[piece.toLowerCase()]} on ${name}`, () => { selected = sq; render(true); });
+      }
     }
+    if (refocus && pad.firstChild) pad.firstChild.focus();
   }
 
   function renderMoves() {
@@ -302,11 +328,11 @@
     list.scrollTop = list.scrollHeight;
   }
 
-  function render() {
+  function render(refocus) {
     renderBoard();
     renderPlayers();
     renderStatus();
-    renderPromotion();
+    renderPad(refocus);
     renderMoves();
   }
 

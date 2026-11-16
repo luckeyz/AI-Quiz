@@ -25,7 +25,15 @@
     font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     display: flex; justify-content: center; padding: 20px 16px 40px;
   }
-  main { width: 100%; max-width: min(560px, calc(100vh - 300px)); min-width: min(100%, 300px); }
+  main { width: 100%; max-width: 560px; }
+  #game { display: grid; gap: 16px; }
+  .table { min-width: 0; }
+  @media (min-width: 880px) {
+    main { max-width: 940px; }
+    #lobby { max-width: 560px; }
+    #game:not([hidden]) { grid-template-columns: minmax(0, min(580px, calc(100vh - 150px))) minmax(280px, 1fr); align-items: start; gap: 28px; }
+    #remote { margin-top: 38px; }
+  }
   h1 { font-size: 1.25rem; margin: 0; letter-spacing: .01em; }
   header { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 14px; }
   .code { font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--muted); letter-spacing: .08em; }
@@ -47,12 +55,9 @@
   #lobby p { margin: 0; color: var(--muted); }
   .card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 18px; display: grid; gap: 12px; }
   .card h2 { font-size: 1rem; margin: 0; }
-  .row { display: flex; gap: 8px; }
-  .row input {
-    flex: 1; min-width: 0; border: 1px solid var(--line); background: var(--bg); border-radius: 8px;
-    padding: 9px 12px; min-height: 42px;
-  }
-  #joinCode { text-transform: uppercase; font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .1em; }
+  #openGames { display: flex; flex-wrap: wrap; gap: 8px; }
+  #openGames .btn { font-family: ui-monospace, Menlo, Consolas, monospace; letter-spacing: .08em; }
+  #link { margin: 0; color: var(--muted); font-size: .9rem; overflow-wrap: anywhere; user-select: all; }
 
   /* Game */
   .player { display: flex; align-items: center; gap: 8px; min-height: 34px; padding: 4px 2px; }
@@ -69,12 +74,10 @@
     box-shadow: 0 1px 3px rgba(0, 0, 0, .25);
   }
   .sq {
-    position: relative; border: 0; padding: 0; margin: 0; aspect-ratio: 1; cursor: default;
-    display: grid; place-items: center; background: var(--light); -webkit-tap-highlight-color: transparent;
+    position: relative; aspect-ratio: 1; display: grid; place-items: center; background: var(--light);
     font-size: 9.6cqw; line-height: 1; font-family: "Segoe UI Symbol", "Noto Sans Symbols2", "DejaVu Sans", "Apple Symbols", sans-serif;
   }
   .sq.dark { background: var(--dark); }
-  .sq.movable, .sq.target { cursor: pointer; }
   .sq.last::before { content: ""; position: absolute; inset: 0; background: var(--last); }
   .sq.selected::before { content: ""; position: absolute; inset: 0; background: var(--select); opacity: .85; }
   .sq.check::before { content: ""; position: absolute; inset: 0; background: radial-gradient(circle, var(--check) 25%, transparent 75%); }
@@ -84,7 +87,6 @@
   .sq.target.capture::after {
     width: 88%; height: 88%; background: none; border: .9cqw solid rgba(20, 30, 20, .32);
   }
-  .sq:focus-visible { outline: 3px solid var(--accent); outline-offset: -3px; z-index: 1; }
   .piece { position: relative; pointer-events: none; }
   .piece.w { color: #fbfaf6; text-shadow: 0 0 1px #000, 0 0 1px #000, 0 1px 2px rgba(0, 0, 0, .6), 1px 0 0 #222, -1px 0 0 #222, 0 1px 0 #222, 0 -1px 0 #222; }
   .piece.b { color: #1d1c1a; text-shadow: 0 0 1px rgba(255, 255, 255, .5); }
@@ -95,14 +97,24 @@
   .coord.rank { top: 3%; left: 5%; }
   .coord.file { bottom: 2%; right: 6%; }
 
-  #status { margin: 10px 0 0; min-height: 1.5em; font-weight: 600; }
-  #hint { margin: 2px 0 12px; color: var(--muted); min-height: 1.5em; font-size: .93rem; }
-  #promo { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
-  #promo .sq { width: 54px; font-size: 38px; border-radius: 8px; cursor: pointer; background: var(--light); }
+  #status { margin: 0; font-weight: 600; }
+  #hint { margin: -8px 0 0; color: var(--muted); min-height: 1.5em; font-size: .93rem; }
+  #pad { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  #pad:empty { display: none; }
+  .key {
+    border: 1px solid transparent; border-radius: 10px; background: var(--light); color: #23211d; cursor: pointer;
+    min-height: 56px; padding: 4px; display: flex; align-items: center; justify-content: center; gap: 4px;
+    font-weight: 600; font-size: 1.05rem; font-variant-numeric: tabular-nums; -webkit-tap-highlight-color: transparent;
+  }
+  .key:hover { border-color: #23211d; }
+  .key:active { background: var(--select); }
+  .key .piece { font-size: 1.7rem; line-height: 1; font-family: "Segoe UI Symbol", "Noto Sans Symbols2", "DejaVu Sans", "Apple Symbols", sans-serif; }
+  .key.wide { grid-column: 1 / -1; min-height: 44px; background: none; color: inherit; border-color: var(--line); font-weight: 400; }
+  .key.wide:hover { border-color: var(--muted); }
+  #invite { display: grid; gap: 10px; }
   .controls { display: flex; gap: 8px; flex-wrap: wrap; }
-  #invite { margin-top: 14px; }
   #moves {
-    margin: 16px 0 0; padding: 0; list-style: none; display: grid; grid-template-columns: 2.2em 1fr 1fr;
+    margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: 2.2em 1fr 1fr;
     gap: 2px 10px; font-variant-numeric: tabular-nums; max-height: 180px; overflow-y: auto;
   }
   #moves .n { color: var(--muted); }
@@ -116,43 +128,41 @@
   </header>
 
   <section id="lobby" hidden>
-    <p>Play a friend online. Tap a piece, then tap where it should go.</p>
+    <p>Play a friend online. Pick a piece, then pick where it goes.</p>
     <div class="card">
       <h2>Start a game</h2>
       <button class="btn primary" id="create">Create game</button>
     </div>
-    <form class="card" id="joinForm">
-      <h2>Join with a code</h2>
-      <div class="row">
-        <input id="joinCode" maxlength="5" placeholder="ABCDE" aria-label="Game code" autocomplete="off" required>
-        <button class="btn">Join</button>
-      </div>
-    </form>
+    <div class="card">
+      <h2>Join a game</h2>
+      <div id="openGames"></div>
+      <p id="noGames">No games are waiting for a player. Open an invite link, or create a game.</p>
+    </div>
     <p id="lobbyError" role="alert"></p>
   </section>
 
   <section id="game" hidden>
-    <div class="player" id="top"><span class="dot"></span><span class="name"></span><span class="taken"></span></div>
-    <div id="board" role="group" aria-label="Chess board"></div>
-    <div class="player" id="bottom"><span class="dot"></span><span class="name"></span><span class="taken"></span></div>
-
-    <p id="status" aria-live="polite"></p>
-    <p id="hint"></p>
-    <div id="promo" hidden><span>Promote to:</span></div>
-
-    <div class="controls">
-      <button class="btn danger" id="resign">Resign</button>
-      <button class="btn primary" id="rematch" hidden>Rematch</button>
-      <button class="btn" id="leave">Leave</button>
+    <div class="table">
+      <div class="player" id="top"><span class="dot"></span><span class="name"></span><span class="taken"></span></div>
+      <div id="board" role="group" aria-label="Chess board"></div>
+      <div class="player" id="bottom"><span class="dot"></span><span class="name"></span><span class="taken"></span></div>
     </div>
-    <div class="card" id="invite" hidden>
-      <h2>Invite your opponent</h2>
-      <div class="row">
-        <input id="link" readonly aria-label="Invite link">
-        <button class="btn" id="copy">Copy</button>
+
+    <aside class="card" id="remote" aria-label="Remote control">
+      <p id="status" aria-live="polite"></p>
+      <p id="hint"></p>
+      <div id="pad"></div>
+      <div id="invite" hidden>
+        <p id="link"></p>
+        <button class="btn primary" id="copy">Copy invite link</button>
       </div>
-    </div>
-    <ol id="moves" aria-label="Moves"></ol>
+      <div class="controls">
+        <button class="btn danger" id="resign">Resign</button>
+        <button class="btn primary" id="rematch" hidden>Rematch</button>
+        <button class="btn" id="leave">Leave</button>
+      </div>
+      <ol id="moves" aria-label="Moves"></ol>
+    </aside>
   </section>
 </main>
 <script src="engine.js"></script>

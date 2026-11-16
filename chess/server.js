@@ -175,6 +175,11 @@ async function handle(req, res) {
     return fs.createReadStream(path.join(PUBLIC, file)).pipe(res);
   }
 
+  if (req.method === 'GET' && url.pathname === '/api/rooms') {
+    const open = [...rooms.values()].filter((r) => r.players.w && !r.players.b && isOnline(r, r.players.w));
+    return sendJson(res, 200, { rooms: open.map((r) => r.id) });
+  }
+
   if (req.method === 'POST' && url.pathname === '/api/rooms') {
     return sendJson(res, 201, { room: createRoom().id });
   }
